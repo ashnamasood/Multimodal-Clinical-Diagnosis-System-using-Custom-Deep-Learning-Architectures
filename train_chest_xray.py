@@ -17,6 +17,31 @@ from torch.utils.data import DataLoader, Dataset, Subset, random_split
 from torchvision import datasets, transforms, models
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score
 
+# #region agent log
+_DEBUG_LOG_PATH = Path(__file__).resolve().parent / "debug-9f5fc4.log"
+
+
+def _debug_log(location: str, message: str, data: dict, hypothesis_id: str, run_id: str = "pre-fix") -> None:
+    import time
+
+    payload = {
+        "sessionId": "9f5fc4",
+        "runId": run_id,
+        "hypothesisId": hypothesis_id,
+        "location": location,
+        "message": message,
+        "data": data,
+        "timestamp": int(time.time() * 1000),
+    }
+    try:
+        with _DEBUG_LOG_PATH.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload) + "\n")
+    except OSError:
+        pass
+
+
+# #endregion
+
 
 class FocalLoss(nn.Module):
     """Focal Loss for handling class imbalance in multi-label classification.
@@ -592,8 +617,10 @@ def preview_test_predictions(
     test_predictions: list[int],
     test_confidences: list[float],
     max_samples: int = 5,
+    decision_thresholds: dict[str, float] | None = None,
 ) -> None:
-    # Multi-label preview: show top predicted diseases with probabilities and conservative wording
+    decision_thresholds = decision_thresholds or {name: 0.5 for name in class_names}
+    # Multi-label preview: show threshold-based predicted diseases with probabilities
     preview_count = min(max_samples, len(dataset))
     print(f"Previewing first {preview_count} test samples:")
     gradcam = GradCAM(model, _get_last_conv_layer(model))
@@ -604,42 +631,42 @@ def preview_test_predictions(
         logits = model(input_tensor)
         probs = torch.sigmoid(logits).squeeze(0).cpu().tolist()
 
-        # get top-3 disease predictions
-        labelled = list(enumerate(probs))
-        labelled_sorted = sorted(labelled, key=lambda x: x[1], reverse=True)
+        display_text, positive_labels, gradcam_index, headline_conf = _format_clinical_prediction(
+            probs, class_names, decision_thresholds
+        )
+        labelled_sorted = sorted(enumerate(probs), key=lambda item: item[1], reverse=True)
         topk = labelled_sorted[:3]
-        top_text = ", ".join([f"{class_names[i]} ({p:.2f})" for i, p in topk if p >= 0.01])
         interpretation_lines = []
-        for i, p in topk:
-            if p >= 0.5:
-                interpretation_lines.append(f"Possible signs of {class_names[i]} detected ({p:.2f})")
-            elif p >= 0.2:
-                interpretation_lines.append(f"Weak evidence of {class_names[i]} ({p:.2f})")
-        if not interpretation_lines:
+        if positive_labels:
+            for label in positive_labels:
+                idx = class_names.index(label)
+                interpretation_lines.append(f"Possible signs of {label} detected ({probs[idx]:.2f})")
+        elif headline_conf >= 0.2:
+            interpretation_lines.append(
+                f"No disease above threshold; highest raw score {class_names[gradcam_index]} ({headline_conf:.2f})"
+            )
+        else:
             interpretation_lines = ["No strong signs detected (low confidence)"]
 
         sample_path = _resolve_sample_path(dataset, index)
         path_text = sample_path.name if sample_path is not None else f"sample_{index + 1}"
-        print(f"Test {index + 1}: {path_text} | Top: {top_text}")
+        print(f"Test {index + 1}: {path_text} | Prediction: {display_text}")
         for line in interpretation_lines:
             print("  -", line)
 
         source_image = _resolve_sample_image(dataset, index)
-        # use highest-confidence label to generate Grad-CAM visualization
-        highest_label = labelled_sorted[0][0]
-        heatmap = gradcam(input_tensor, int(highest_label))
+        heatmap = gradcam(input_tensor, int(gradcam_index))
         gradcam_overlay = _make_gradcam_overlay(source_image, heatmap)
         preview_name = f"test_preview_{index + 1}_{path_text}"
         preview_path = output_dir / "test_previews" / preview_name
-        # preview shows top-3 summary
         _save_preview_image(
             source_image,
             gradcam_overlay,
             preview_path,
-            top_text,
+            display_text,
             "N/A",
             "; ".join(interpretation_lines),
-            ", ".join([f"{p:.2f}" for _, p in topk]),
+            f"{headline_conf:.2f}",
         )
         print(f"Saved preview image: {preview_path}")
 
@@ -693,32 +720,122 @@ def optimize_decision_thresholds(
                 best_threshold = threshold
         
         thresholds[class_names[label_idx]] = float(best_threshold)
-    
+
+    # #region agent log
+    _debug_log(
+        "train_chest_xray.py:optimize_decision_thresholds",
+        "validation thresholds computed",
+        {
+            "threshold_count": len(thresholds),
+            "sample_thresholds": dict(list(thresholds.items())[:4]),
+            "default_0_5_count": sum(1 for value in thresholds.values() if abs(value - 0.5) < 1e-6),
+        },
+        "H3",
+    )
+    # #endregion
+
     print(f"\nOptimized per-class thresholds (based on validation F1):")
     for name, thresh in thresholds.items():
         print(f"  {name}: {thresh:.3f}")
     
     return thresholds
-    print("Confusion matrix:")
-    print("                Pred No Finding   Pred Finding")
-    print(f"Actual No Finding  {stats['tn']:>6}            {stats['fp']:>6}")
-    print(f"Actual Finding     {stats['fn']:>6}            {stats['tp']:>6}")
-    print(
-        "Metrics | "
-        f"Precision={stats['precision']:.4f} "
-        f"Recall={stats['recall']:.4f} "
-        f"F1={stats['f1_score']:.4f} "
-        f"Accuracy={stats['accuracy']:.4f}"
-    )
 
 
-def save_checkpoint(model: nn.Module, class_names: Iterable[str], output_dir: Path) -> Path:
+def _load_checkpoint_payload(checkpoint_path: Path, device: torch.device) -> dict:
+    try:
+        return torch.load(checkpoint_path, map_location=device, weights_only=False)
+    except TypeError:
+        return torch.load(checkpoint_path, map_location=device)
+
+
+def _resolve_checkpoint_path(checkpoint_path: Path) -> Path:
+    if checkpoint_path.exists():
+        return checkpoint_path
+    best_path = checkpoint_path.parent / "chest_xray_cnn_best.pt"
+    if best_path.exists():
+        print(f"Note: using best checkpoint {best_path} ({checkpoint_path} not found)")
+        return best_path
+    return checkpoint_path
+
+
+def _load_thresholds_for_checkpoint(checkpoint_path: Path, class_names: list[str]) -> dict[str, float]:
+    resolved = _resolve_checkpoint_path(checkpoint_path)
+    if resolved.exists():
+        try:
+            payload = _load_checkpoint_payload(resolved, torch.device("cpu"))
+            thresholds = payload.get("optimized_thresholds")
+            if isinstance(thresholds, dict):
+                return {name: float(thresholds.get(name, 0.5)) for name in class_names}
+        except Exception:
+            pass
+
+    metrics_path = checkpoint_path.parent / "test_metrics.json"
+    if not metrics_path.exists():
+        return {name: 0.5 for name in class_names}
+
+    try:
+        payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {name: 0.5 for name in class_names}
+
+    thresholds = payload.get("optimized_thresholds")
+    if not isinstance(thresholds, dict):
+        return {name: 0.5 for name in class_names}
+
+    return {name: float(thresholds.get(name, 0.5)) for name in class_names}
+
+
+def _thresholded_prediction_vector(
+    probs: list[float],
+    class_names: list[str],
+    decision_thresholds: dict[str, float],
+) -> list[int]:
+    return [
+        1 if probs[class_idx] >= decision_thresholds.get(class_names[class_idx], 0.5) else 0
+        for class_idx in range(len(class_names))
+    ]
+
+
+def _format_clinical_prediction(
+    probs: list[float],
+    class_names: list[str],
+    decision_thresholds: dict[str, float],
+) -> tuple[str, list[str], int, float]:
+    """Return display text, positive labels, Grad-CAM class index, and headline confidence."""
+    thresholded = _thresholded_prediction_vector(probs, class_names, decision_thresholds)
+    positive_indices = [idx for idx, active in enumerate(thresholded) if active == 1]
+    ranked = sorted(enumerate(probs), key=lambda item: item[1], reverse=True)
+
+    if positive_indices:
+        positive_indices.sort(key=lambda idx: probs[idx], reverse=True)
+        positive_labels = [class_names[idx] for idx in positive_indices]
+        display_text = ", ".join(f"{label} ({probs[idx]:.2f})" for idx, label in zip(positive_indices, positive_labels))
+        gradcam_index = positive_indices[0]
+        headline_conf = probs[gradcam_index]
+        return display_text, positive_labels, gradcam_index, headline_conf
+
+    top_idx, top_prob = ranked[0]
+    if top_prob >= 0.2:
+        display_text = f"No Finding (weak signal: {class_names[top_idx]} {top_prob:.2f})"
+    else:
+        display_text = "No Finding (low confidence)"
+    return display_text, [], top_idx, top_prob
+
+
+def save_checkpoint(
+    model: nn.Module,
+    class_names: Iterable[str],
+    output_dir: Path,
+    optimized_thresholds: dict[str, float] | None = None,
+) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = output_dir / "chest_xray_cnn.pt"
     payload = {
         "model_state_dict": model.state_dict(),
         "class_names": list(class_names),
     }
+    if optimized_thresholds is not None:
+        payload["optimized_thresholds"] = optimized_thresholds
     torch.save(payload, checkpoint_path)
     metadata_path = output_dir / "chest_xray_classes.json"
     metadata_path.write_text(json.dumps({"class_names": list(class_names)}, indent=2))
@@ -842,23 +959,6 @@ def _load_external_labels_csv(labels_csv: Path, class_names: list[str]) -> dict[
     return label_map
 
 
-def _load_thresholds_for_checkpoint(checkpoint_path: Path, class_names: list[str]) -> dict[str, float]:
-    metrics_path = checkpoint_path.parent / "test_metrics.json"
-    if not metrics_path.exists():
-        return {name: 0.5 for name in class_names}
-
-    try:
-        payload = json.loads(metrics_path.read_text(encoding="utf-8"))
-    except Exception:
-        return {name: 0.5 for name in class_names}
-
-    thresholds = payload.get("optimized_thresholds")
-    if not isinstance(thresholds, dict):
-        return {name: 0.5 for name in class_names}
-
-    return {name: float(thresholds.get(name, 0.5)) for name in class_names}
-
-
 def run_external_test_inference(
     model: nn.Module,
     images: list[tuple[Path, torch.Tensor]],
@@ -888,20 +988,36 @@ def run_external_test_inference(
         with torch.no_grad():
             logits = model(input_tensor)
             probs = torch.sigmoid(logits).squeeze(0).cpu().tolist()
-            # top-3
-            labelled = list(enumerate(probs))
-            labelled_sorted = sorted(labelled, key=lambda x: x[1], reverse=True)
-            pred = labelled_sorted[0][0]
-            conf = labelled_sorted[0][1]
-            thresholded_prediction = [
-                1 if probs[class_idx] >= decision_thresholds.get(class_names[class_idx], 0.5) else 0
-                for class_idx in range(len(class_names))
-            ]
+            labelled_sorted = sorted(enumerate(probs), key=lambda item: item[1], reverse=True)
+            thresholded_prediction = _thresholded_prediction_vector(probs, class_names, decision_thresholds)
+            display_text, positive_labels, gradcam_index, headline_conf = _format_clinical_prediction(
+                probs, class_names, decision_thresholds
+            )
 
-        top1_text = f"{class_names[pred]} ({conf:.2f})"
-        positive_labels = [class_names[i] for i, p in labelled_sorted if p >= 0.5]
-        interpretation = [f"Highest-confidence disease: {class_names[pred]} ({conf:.2f})"]
-        if conf < 0.2:
+        # #region agent log
+        _debug_log(
+            "train_chest_xray.py:run_external_test_inference",
+            "external prediction breakdown",
+            {
+                "filename": path.name,
+                "top1_label": class_names[labelled_sorted[0][0]],
+                "top1_prob": round(float(labelled_sorted[0][1]), 4),
+                "display_prediction": display_text,
+                "threshold_positives": positive_labels,
+                "thresholds_source": "custom" if any(abs(v - 0.5) > 1e-6 for v in decision_thresholds.values()) else "all_default_0.5",
+                "display_uses_top1_not_threshold": False,
+            },
+            "H1",
+            run_id="post-fix",
+        )
+        # #endregion
+
+        interpretation = []
+        if positive_labels:
+            interpretation = [f"Threshold-positive findings: {', '.join(positive_labels)}"]
+        elif headline_conf >= 0.2:
+            interpretation = [f"No disease above threshold; highest raw score {class_names[gradcam_index]} ({headline_conf:.2f})"]
+        else:
             interpretation = ["No strong signs detected (low confidence)"]
         target = external_targets.get(path.name) if external_targets else None
         if target is not None:
@@ -909,17 +1025,15 @@ def run_external_test_inference(
             all_predictions.append(thresholded_prediction)
             all_probabilities.append(probs)
         summary_lines = [
-            f"Predicted disease: {class_names[pred]} ({conf:.2f})",
+            f"Predicted: {display_text}",
+            f"Headline confidence: {headline_conf:.2f}",
         ]
-        summary_lines.append(f"Confidence: {conf:.2f}")
-        if positive_labels:
-            summary_lines.append("Other diseases above threshold: " + ", ".join(positive_labels))
-        print(f"External {idx}: {path.name} | Predicted: {top1_text}")
+        print(f"External {idx}: {path.name} | {display_text}")
         for line in interpretation:
             print("  -", line)
 
         source_image = Image.open(path).convert("RGB")
-        heatmap = gradcam(input_tensor, pred)
+        heatmap = gradcam(input_tensor, int(gradcam_index))
         gradcam_overlay = _make_gradcam_overlay(source_image, heatmap)
 
         preview_name = f"external_preview_{idx}_{path.name}"
@@ -928,17 +1042,17 @@ def run_external_test_inference(
             source_image,
             gradcam_overlay,
             preview_path,
-            f"{class_names[pred]} ({conf:.2f})",
+            display_text,
             "Input image",
             "External inference",
-            f"{conf:.2f}",
+            f"{headline_conf:.2f}",
             summary_lines,
         )
         print(f"Saved external preview: {preview_path}")
         row = {"filename": path.name, "preview": str(preview_path)}
-        row["predicted_label"] = class_names[pred]
-        row["predicted_confidence"] = float(conf)
-        row["top1"] = top1_text
+        row["predicted_label"] = ", ".join(positive_labels) if positive_labels else "No Finding"
+        row["predicted_confidence"] = float(headline_conf)
+        row["top1"] = display_text
         if target is not None:
             row["ground_truth"] = "|".join([class_names[i] for i, value in enumerate(target) if value == 1]) or "No Finding"
         for i, name in enumerate(class_names):
@@ -1064,10 +1178,27 @@ def main() -> None:
     if getattr(args, "inference_only", False):
         if args.external_test_folder is None:
             raise ValueError("--inference-only requires --external-test-folder to be set.")
-        checkpoint_path = args.checkpoint
+        checkpoint_path = _resolve_checkpoint_path(args.checkpoint)
+        best_checkpoint_path = checkpoint_path.parent / "chest_xray_cnn_best.pt"
+        metrics_path = checkpoint_path.parent / "test_metrics.json"
+        # #region agent log
+        _debug_log(
+            "train_chest_xray.py:main:inference_only",
+            "inference-only checkpoint context",
+            {
+                "checkpoint": str(checkpoint_path),
+                "checkpoint_exists": checkpoint_path.exists(),
+                "best_checkpoint_exists": best_checkpoint_path.exists(),
+                "metrics_json_exists": metrics_path.exists(),
+                "external_folder": str(args.external_test_folder),
+            },
+            "H4",
+            run_id="post-fix",
+        )
+        # #endregion
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
-        payload = torch.load(checkpoint_path, map_location=device)
+        payload = _load_checkpoint_payload(checkpoint_path, device)
         class_names = payload.get("class_names")
         if class_names is None:
             raise ValueError("Checkpoint missing class_names metadata.")
@@ -1077,7 +1208,19 @@ def main() -> None:
         external_targets = None
         if args.external_labels_csv is not None:
             external_targets = _load_external_labels_csv(args.external_labels_csv, class_names)
-        decision_thresholds = _load_thresholds_for_checkpoint(args.checkpoint, class_names)
+        decision_thresholds = _load_thresholds_for_checkpoint(checkpoint_path, class_names)
+        # #region agent log
+        _debug_log(
+            "train_chest_xray.py:main:inference_only",
+            "loaded decision thresholds",
+            {
+                "threshold_sample": dict(list(decision_thresholds.items())[:4]),
+                "using_defaults_only": all(abs(v - 0.5) < 1e-6 for v in decision_thresholds.values()),
+            },
+            "H3",
+            run_id="post-fix",
+        )
+        # #endregion
         run_external_test_inference(
             model,
             external_images,
@@ -1171,39 +1314,62 @@ def main() -> None:
                 print(f"\nEarly stopping triggered after {epoch} epochs (val_loss not improving)")
                 break
 
-    test_loss, test_targets, test_predictions, test_probabilities = collect_test_predictions(
-        model,
-        test_loader,
-        criterion,
-        device,
-    )
-    print(f"\nTest set | test_loss={test_loss:.4f}")
+    best_ckpt_path = args.output_dir / "chest_xray_cnn_best.pt"
+    reloaded_best = False
+    if best_ckpt_path.exists():
+        best_payload = _load_checkpoint_payload(best_ckpt_path, device)
+        model.load_state_dict(best_payload["model_state_dict"])
+        reloaded_best = True
+        print(f"Restored best-validation checkpoint from {best_ckpt_path}")
 
-    # Optimize per-class thresholds on validation set
+    final_weight_probe = float(next(model.parameters()).detach().cpu().mean().item())
+    # #region agent log
+    _debug_log(
+        "train_chest_xray.py:main:post_train",
+        "weights after optional best-checkpoint reload",
+        {
+            "epoch_stopped": epoch,
+            "best_val_loss": float(best_val_loss),
+            "patience_counter": patience_counter,
+            "best_checkpoint_exists": best_ckpt_path.exists(),
+            "reloaded_best": reloaded_best,
+            "model_weight_mean_probe": round(final_weight_probe, 8),
+        },
+        "H2",
+        run_id="post-fix",
+    )
+    # #endregion
+
     optimized_thresholds = optimize_decision_thresholds(model, val_loader, class_names, device)
 
-    # Re-compute predictions with optimized thresholds
     model.eval()
-    test_targets = []
-    test_predictions = []
-    test_probabilities = []
-    
+    test_targets: list[list[int]] = []
+    test_predictions: list[list[int]] = []
+    test_probabilities: list[list[float]] = []
+    test_loss_running = 0.0
+    test_loss_total = 0
+
     with torch.no_grad():
         for images, labels in test_loader:
             images = images.to(device)
             labels = labels.to(device)
             logits = model(images)
+            loss = criterion(logits, labels)
             probs = torch.sigmoid(logits)
-            
-            # Apply per-class thresholds
+
             preds = torch.zeros_like(probs)
             for class_idx, class_name in enumerate(class_names):
                 threshold = optimized_thresholds.get(class_name, 0.5)
                 preds[:, class_idx] = (probs[:, class_idx] >= threshold).float()
-            
+
+            test_loss_running += loss.item() * images.size(0)
+            test_loss_total += labels.size(0)
             test_targets.extend(labels.cpu().tolist())
             test_predictions.extend(preds.cpu().tolist())
             test_probabilities.extend(probs.cpu().tolist())
+
+    test_loss = test_loss_running / max(1, test_loss_total)
+    print(f"\nTest set | test_loss={test_loss:.4f}")
 
     # compute multi-label metrics
     targets_np = np.array(test_targets)
@@ -1268,9 +1434,52 @@ def main() -> None:
         [],
         [],
         max_samples=5,
+        decision_thresholds=optimized_thresholds,
     )
 
-    checkpoint_path = save_checkpoint(model, class_names, args.output_dir)
+    checkpoint_path = save_checkpoint(
+        model,
+        class_names,
+        args.output_dir,
+        optimized_thresholds=optimized_thresholds if multi_label else None,
+    )
+    if best_ckpt_path.exists():
+        best_payload = {
+            "model_state_dict": model.state_dict(),
+            "class_names": class_names,
+        }
+        if multi_label:
+            best_payload["optimized_thresholds"] = optimized_thresholds
+        torch.save(best_payload, best_ckpt_path)
+    # #region agent log
+    if best_ckpt_path.exists():
+        try:
+            best_payload = torch.load(best_ckpt_path, map_location="cpu")
+            best_probe = float(next(iter(best_payload["model_state_dict"].values())).mean().item())
+            final_probe = float(next(model.parameters()).detach().cpu().mean().item())
+            _debug_log(
+                "train_chest_xray.py:main:save_checkpoint",
+                "final vs best checkpoint weight comparison",
+                {
+                    "final_checkpoint": str(checkpoint_path),
+                    "best_checkpoint": str(best_ckpt_path),
+                    "best_weight_probe": round(best_probe, 8),
+                    "final_weight_probe": round(final_probe, 8),
+                    "weights_match_best": abs(best_probe - final_probe) < 1e-6,
+                    "thresholds_saved_in_checkpoint": isinstance(best_payload.get("optimized_thresholds"), dict),
+                },
+                "H2",
+                run_id="post-fix",
+            )
+        except Exception as exc:
+            _debug_log(
+                "train_chest_xray.py:main:save_checkpoint",
+                "failed to compare best vs final checkpoint",
+                {"error": type(exc).__name__},
+                "H2",
+                run_id="post-fix",
+            )
+    # #endregion
     print(f"Saved final checkpoint to {checkpoint_path}")
 
     # Run inference on the external input folder after training.
@@ -1280,7 +1489,7 @@ def main() -> None:
         external_targets = None
         if args.external_labels_csv is not None:
             external_targets = _load_external_labels_csv(args.external_labels_csv, class_names)
-        decision_thresholds = _load_thresholds_for_checkpoint(args.checkpoint, class_names)
+        decision_thresholds = _load_thresholds_for_checkpoint(checkpoint_path, class_names)
         run_external_test_inference(
             model,
             external_images,
