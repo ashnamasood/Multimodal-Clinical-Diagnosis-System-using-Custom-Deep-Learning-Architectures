@@ -1,11 +1,61 @@
-# Ignore outputs and generated artifacts
-outputs/
-my_outputs/
+# --- Generated model artifacts (retrain to recreate) ---
 *.pt
 *.pth
+*.joblib
+*.onnx
+*.h5
 *.log
-__pycache__/
-*.pyc
 
-# Editor/OS files
+# Root-level chest X-ray run outputs
+/outputs/
+/my_outputs/
+
+# Heart & skin branch: ignore weights/previews; keep metrics JSON + figure PNGs
+Heart&SkinCancer/outputs/**/*.pt
+Heart&SkinCancer/outputs/**/*.joblib
+Heart&SkinCancer/outputs/**/val_previews/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.pyo
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- OS / editor ---
 .DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# --- Secrets ---
+.env
+.env.*
+*.pem
+
+# --- Large local datasets (download from Kaggle) ---
+**/HAM10000_images*/
+**/images_*/
+**/archive/
+Data_Entry_2017.csv
+
+# HMNIST flat pixel CSVs are large; use Kaggle export locally
+**/hmnist_*_RGB.csv
+**/hmnist_*_L.csv
+
+# Optional: keep small sample chest inputs out of git (use input/ locally)
+# /input/

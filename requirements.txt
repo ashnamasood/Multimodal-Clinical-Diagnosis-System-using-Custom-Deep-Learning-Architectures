@@ -5,3 +5,5 @@ pillow
 matplotlib
 scikit-learn
 opencv-python
+pandas
+joblib
