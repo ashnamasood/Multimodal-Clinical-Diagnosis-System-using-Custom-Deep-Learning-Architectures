@@ -1,0 +1,11 @@
+# Ignore outputs and generated artifacts
+outputs/
+my_outputs/
+*.pt
+*.pth
+*.log
+__pycache__/
+*.pyc
+
+# Editor/OS files
+.DS_Store

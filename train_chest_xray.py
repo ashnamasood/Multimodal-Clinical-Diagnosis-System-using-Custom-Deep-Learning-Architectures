@@ -14,42 +14,83 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset, Subset, random_split
-from torchvision import datasets, transforms
+from torchvision import datasets, transforms, models
 from sklearn.metrics import precision_recall_fscore_support, accuracy_score
 
 
-class ChestXRayCNN(nn.Module):
-    def __init__(self, num_classes: int) -> None:
+class FocalLoss(nn.Module):
+    """Focal Loss for handling class imbalance in multi-label classification.
+    
+    Ref: Lin et al. "Focal Loss for Dense Object Detection" (https://arxiv.org/abs/1708.02002)
+    """
+    def __init__(self, alpha: float = 0.25, gamma: float = 2.0, pos_weight: torch.Tensor | None = None):
         super().__init__()
-        self.features = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d((1, 1)),
+        self.alpha = alpha
+        self.gamma = gamma
+        self.pos_weight = pos_weight
+        
+    def forward(self, logits: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            logits: (N, C) raw predictions
+            targets: (N, C) binary target labels
+        Returns:
+            Scalar loss
+        """
+        sigmoid_p = torch.sigmoid(logits)
+        
+        # BCE loss
+        bce_loss = nn.functional.binary_cross_entropy_with_logits(
+            logits, targets, reduction='none', pos_weight=self.pos_weight
         )
+        
+        # Focal loss modulation
+        p_t = sigmoid_p * targets + (1 - sigmoid_p) * (1 - targets)
+        modulation = (1 - p_t) ** self.gamma
+        focal = self.alpha * modulation * bce_loss
+        
+        return focal.mean()
+
+
+class ChestXRayCNN(nn.Module):
+    """ResNet50 backbone with custom classifier for 14-class chest X-ray disease detection."""
+    def __init__(self, num_classes: int, pretrained: bool = True) -> None:
+        super().__init__()
+        # Load ResNet50 (pretrained if available, otherwise from scratch)
+        try:
+            if pretrained:
+                from torchvision.models import ResNet50_Weights
+                self.backbone = models.resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+            else:
+                self.backbone = models.resnet50(weights=None)
+        except Exception as e:
+            # Fallback: load without pretrained weights if SSL/download fails
+            print(f"Note: Could not load pretrained weights ({type(e).__name__}), using random initialization")
+            self.backbone = models.resnet50(weights=None)
+        
+        # Replace final FC layer
+        in_features = self.backbone.fc.in_features
+        self.backbone.fc = nn.Identity()
+        
+        # Custom classifier head with dropout for regularization
         self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Dropout(0.3),
-            nn.Linear(256, 128),
+            nn.Dropout(0.5),
+            nn.Linear(in_features, 512),
             nn.ReLU(inplace=True),
+            nn.BatchNorm1d(512),
+            nn.Dropout(0.3),
+            nn.Linear(512, 256),
+            nn.ReLU(inplace=True),
+            nn.BatchNorm1d(256),
             nn.Dropout(0.2),
-            nn.Linear(128, num_classes),
+            nn.Linear(256, num_classes),
         )
+        
+        # Store backbone for Grad-CAM
+        self.features = self.backbone
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.features(x)
+        x = self.backbone(x)
         return self.classifier(x)
 
 
@@ -174,15 +215,23 @@ def _build_nih_subset(dataset: NIHChestXrayDataset, limit: int, seed: int) -> Su
 
 
 def _build_train_transform(image_size: int):
+    """Aggressive augmentation for medical imaging with small-to-medium datasets."""
     return transforms.Compose(
         [
             transforms.Grayscale(num_output_channels=3),
             transforms.Resize((image_size, image_size)),
-            transforms.RandomRotation(7),
-            transforms.RandomAffine(degrees=0, translate=(0.02, 0.02), scale=(0.95, 1.05)),
-            transforms.ColorJitter(brightness=0.08, contrast=0.08),
+            # Stronger spatial augmentations for robustness
+            transforms.RandomRotation(15),
+            transforms.RandomAffine(degrees=0, translate=(0.05, 0.05), scale=(0.9, 1.1), shear=10),
+            transforms.RandomHorizontalFlip(p=0.5),
+            # Intensity augmentations
+            transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
+            transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 2.0)),
+            transforms.RandomInvert(p=0.1),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            # Random erasing for occlusion robustness
+            transforms.RandomErasing(p=0.2, scale=(0.02, 0.15), ratio=(0.3, 3.0)),
         ]
     )
 
@@ -424,10 +473,15 @@ def _format_confidence(probability: float) -> str:
 
 
 def _get_last_conv_layer(model: nn.Module) -> nn.Module:
-    for layer in reversed(list(model.features)):
-        if isinstance(layer, nn.Conv2d):
-            return layer
-    raise ValueError("No convolutional layer found for Grad-CAM.")
+    # Robustly find the last Conv2d in the model (works for sequential features
+    # and for models like torchvision ResNet where `features` is not iterable).
+    last_conv = None
+    for module in model.modules():
+        if isinstance(module, nn.Conv2d):
+            last_conv = module
+    if last_conv is None:
+        raise ValueError("No convolutional layer found for Grad-CAM.")
+    return last_conv
 
 
 class GradCAM:
@@ -501,6 +555,7 @@ def _save_preview_image(
     true_text: str,
     result_text: str,
     confidence_text: str,
+    extra_summary_lines: list[str] | None = None,
 ) -> None:
     preview = image.convert("RGB")
     gradcam_preview = gradcam_overlay.convert("RGB")
@@ -518,6 +573,8 @@ def _save_preview_image(
         f"True: {true_text}",
         f"Type: {result_text}",
     ]
+    if extra_summary_lines:
+        lines.extend(extra_summary_lines)
     y = max(preview.height, gradcam_preview.height) + 8
     for line in lines:
         draw.text((8, y), line, fill=(0, 0, 0), font=font)
@@ -589,7 +646,59 @@ def preview_test_predictions(
     gradcam.close()
 
 
-def _print_test_analysis_summary(stats: dict[str, float | int]) -> None:
+def optimize_decision_thresholds(
+    model: nn.Module,
+    val_loader: DataLoader,
+    class_names: list[str],
+    device: torch.device,
+) -> dict[str, float]:
+    """Optimize per-class decision thresholds on validation set to maximize F1 score."""
+    model.eval()
+    all_probs = []
+    all_targets = []
+    
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            logits = model(images)
+            probs = torch.sigmoid(logits).cpu().numpy()
+            all_probs.append(probs)
+            all_targets.append(labels.cpu().numpy())
+    
+    all_probs = np.vstack(all_probs)
+    all_targets = np.vstack(all_targets)
+    
+    thresholds = {}
+    for label_idx in range(len(class_names)):
+        # Grid search for optimal threshold for this label
+        best_f1 = -1.0
+        best_threshold = 0.5
+        
+        label_probs = all_probs[:, label_idx]
+        label_targets = all_targets[:, label_idx]
+        
+        for threshold in np.arange(0.1, 0.95, 0.05):
+            preds = (label_probs >= threshold).astype(int)
+            tp = ((preds == 1) & (label_targets == 1)).sum()
+            fp = ((preds == 1) & (label_targets == 0)).sum()
+            fn = ((preds == 0) & (label_targets == 1)).sum()
+            
+            precision = tp / max(1, tp + fp)
+            recall = tp / max(1, tp + fn)
+            f1 = 2 * precision * recall / max(1e-8, precision + recall)
+            
+            if f1 > best_f1:
+                best_f1 = f1
+                best_threshold = threshold
+        
+        thresholds[class_names[label_idx]] = float(best_threshold)
+    
+    print(f"\nOptimized per-class thresholds (based on validation F1):")
+    for name, thresh in thresholds.items():
+        print(f"  {name}: {thresh:.3f}")
+    
+    return thresholds
     print("Confusion matrix:")
     print("                Pred No Finding   Pred Finding")
     print(f"Actual No Finding  {stats['tn']:>6}            {stats['fp']:>6}")
@@ -617,7 +726,7 @@ def save_checkpoint(model: nn.Module, class_names: Iterable[str], output_dir: Pa
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train a custom chest X-ray CNN from scratch.")
+    parser = argparse.ArgumentParser(description="Train a ResNet50-based chest X-ray disease classifier with Focal Loss.")
     parser.add_argument(
         "--data-root",
         type=Path,
@@ -627,19 +736,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-images",
         type=int,
-        default=50000,
-        help="Maximum images to use for training (default: 50000). Set to 0 to use the full dataset.",
+        default=0,
+        help="Maximum images to use for training (default: 0 = use full dataset). For testing, use 200-500.",
     )
     parser.add_argument("--image-size", type=int, default=224, help="Resize images to this square size.")
-    parser.add_argument("--batch-size", type=int, default=16, help="Batch size for training and validation.")
-    parser.add_argument("--epochs", type=int, default=20, help="Number of training epochs.")
-    parser.add_argument("--learning-rate", type=float, default=1e-3, help="Adam learning rate.")
+    parser.add_argument("--batch-size", type=int, default=8, help="Batch size for training and validation (reduced to 8 for better gradient signals).")
+    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs (default: 100 for convergence with large datasets).")
+    parser.add_argument("--learning-rate", type=float, default=1e-4, help="Adam learning rate (reduced for pretrained backbone).")
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"), help="Directory to save checkpoints.")
     parser.add_argument(
         "--external-test-folder",
         type=Path,
         default=Path("input"),
         help="Path to a folder of external images to run inference on after training (default: input/).",
+    )
+    parser.add_argument(
+        "--external-labels-csv",
+        type=Path,
+        default=None,
+        help="Optional CSV with labels for `--external-test-folder` images. Must contain filename and Finding Labels columns.",
     )
     parser.add_argument(
         "--inference-only",
@@ -653,6 +768,7 @@ def parse_args() -> argparse.Namespace:
         help="Path to a saved model checkpoint to load for inference-only mode (default: outputs/chest_xray_cnn.pt).",
     )
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility.")
+    parser.add_argument("--use-focal-loss", action="store_true", default=True, help="Use Focal Loss for class imbalance (default: True).")
     return parser.parse_args()
 
 
@@ -683,6 +799,66 @@ def _load_external_images(folder: Path, image_size: int):
     return images
 
 
+def _parse_multi_label_text(label_text: str, class_names: list[str]) -> list[int]:
+    multi = [0] * len(class_names)
+    cleaned_text = (label_text or "").strip()
+    if not cleaned_text or cleaned_text == "No Finding":
+        return multi
+
+    for raw_label in cleaned_text.replace(",", "|").split("|"):
+        label = raw_label.strip()
+        if label and label in class_names:
+            multi[class_names.index(label)] = 1
+    return multi
+
+
+def _load_external_labels_csv(labels_csv: Path, class_names: list[str]) -> dict[str, list[int]]:
+    if not labels_csv.exists():
+        raise FileNotFoundError(f"External labels CSV not found: {labels_csv}")
+
+    filename_keys = ("filename", "image", "image_index", "image name")
+    label_keys = ("finding labels", "labels", "label", "finding_label")
+    label_map: dict[str, list[int]] = {}
+
+    with labels_csv.open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        if reader.fieldnames is None:
+            raise ValueError(f"External labels CSV has no header row: {labels_csv}")
+
+        normalized = {name.lower().strip(): name for name in reader.fieldnames}
+        filename_column = next((normalized[key] for key in filename_keys if key in normalized), None)
+        label_column = next((normalized[key] for key in label_keys if key in normalized), None)
+
+        if filename_column is None or label_column is None:
+            raise ValueError(
+                "External labels CSV must contain filename and labels columns. "
+                "Accepted examples: filename + Finding Labels."
+            )
+
+        for row in reader:
+            filename = Path(row[filename_column].strip()).name
+            label_map[filename] = _parse_multi_label_text(row[label_column], class_names)
+
+    return label_map
+
+
+def _load_thresholds_for_checkpoint(checkpoint_path: Path, class_names: list[str]) -> dict[str, float]:
+    metrics_path = checkpoint_path.parent / "test_metrics.json"
+    if not metrics_path.exists():
+        return {name: 0.5 for name in class_names}
+
+    try:
+        payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {name: 0.5 for name in class_names}
+
+    thresholds = payload.get("optimized_thresholds")
+    if not isinstance(thresholds, dict):
+        return {name: 0.5 for name in class_names}
+
+    return {name: float(thresholds.get(name, 0.5)) for name in class_names}
+
+
 def run_external_test_inference(
     model: nn.Module,
     images: list[tuple[Path, torch.Tensor]],
@@ -690,6 +866,8 @@ def run_external_test_inference(
     device: torch.device,
     output_dir: Path,
     image_size: int,
+    external_targets: dict[str, list[int]] | None = None,
+    decision_thresholds: dict[str, float] | None = None,
 ):
     if not images:
         print("No external images found to run inference on.")
@@ -699,8 +877,12 @@ def run_external_test_inference(
     gradcam = GradCAM(model, _get_last_conv_layer(model))
     output_dir = output_dir / "external_test_previews"
     output_dir.mkdir(parents=True, exist_ok=True)
+    decision_thresholds = decision_thresholds or {name: 0.5 for name in class_names}
 
     results = []
+    all_targets: list[list[int]] = []
+    all_predictions: list[list[int]] = []
+    all_probabilities: list[list[float]] = []
     for idx, (path, tensor) in enumerate(images, start=1):
         input_tensor = tensor.unsqueeze(0).to(device)
         with torch.no_grad():
@@ -711,18 +893,28 @@ def run_external_test_inference(
             labelled_sorted = sorted(labelled, key=lambda x: x[1], reverse=True)
             pred = labelled_sorted[0][0]
             conf = labelled_sorted[0][1]
+            thresholded_prediction = [
+                1 if probs[class_idx] >= decision_thresholds.get(class_names[class_idx], 0.5) else 0
+                for class_idx in range(len(class_names))
+            ]
 
-        # conservative wording
-        topk_text = ", ".join([f"{class_names[i]} ({p:.2f})" for i, p in labelled_sorted[:3]])
-        interpretation = []
-        for i, p in labelled_sorted[:3]:
-            if p >= 0.5:
-                interpretation.append(f"Possible signs of {class_names[i]} detected ({p:.2f})")
-            elif p >= 0.2:
-                interpretation.append(f"Weak evidence of {class_names[i]} ({p:.2f})")
-        if not interpretation:
+        top1_text = f"{class_names[pred]} ({conf:.2f})"
+        positive_labels = [class_names[i] for i, p in labelled_sorted if p >= 0.5]
+        interpretation = [f"Highest-confidence disease: {class_names[pred]} ({conf:.2f})"]
+        if conf < 0.2:
             interpretation = ["No strong signs detected (low confidence)"]
-        print(f"External {idx}: {path.name} | Top: {topk_text}")
+        target = external_targets.get(path.name) if external_targets else None
+        if target is not None:
+            all_targets.append(target)
+            all_predictions.append(thresholded_prediction)
+            all_probabilities.append(probs)
+        summary_lines = [
+            f"Predicted disease: {class_names[pred]} ({conf:.2f})",
+        ]
+        summary_lines.append(f"Confidence: {conf:.2f}")
+        if positive_labels:
+            summary_lines.append("Other diseases above threshold: " + ", ".join(positive_labels))
+        print(f"External {idx}: {path.name} | Predicted: {top1_text}")
         for line in interpretation:
             print("  -", line)
 
@@ -736,13 +928,19 @@ def run_external_test_inference(
             source_image,
             gradcam_overlay,
             preview_path,
-            class_names[pred],
-            "N/A",
-            "Prediction",
+            f"{class_names[pred]} ({conf:.2f})",
+            "Input image",
+            "External inference",
             f"{conf:.2f}",
+            summary_lines,
         )
         print(f"Saved external preview: {preview_path}")
         row = {"filename": path.name, "preview": str(preview_path)}
+        row["predicted_label"] = class_names[pred]
+        row["predicted_confidence"] = float(conf)
+        row["top1"] = top1_text
+        if target is not None:
+            row["ground_truth"] = "|".join([class_names[i] for i, value in enumerate(target) if value == 1]) or "No Finding"
         for i, name in enumerate(class_names):
             row[name] = probs[i]
         row["interpretation"] = " | ".join(interpretation)
@@ -753,7 +951,10 @@ def run_external_test_inference(
     csv_path = output_dir / "external_test_results.csv"
     try:
         # write CSV with per-label probabilities
-        fieldnames = ["filename"] + list(class_names) + ["preview", "interpretation"]
+        fieldnames = ["filename", "predicted_label", "predicted_confidence", "top1"]
+        if external_targets:
+            fieldnames.append("ground_truth")
+        fieldnames += list(class_names) + ["preview", "interpretation"]
         with csv_path.open("w", encoding="utf-8", newline="") as fh:
             writer = csv.DictWriter(fh, fieldnames=fieldnames)
             writer.writeheader()
@@ -762,6 +963,46 @@ def run_external_test_inference(
         print(f"Wrote external results CSV: {csv_path}")
     except Exception as exc:
         print(f"Failed to write external results CSV: {exc}")
+
+    if all_targets:
+        targets_np = np.array(all_targets)
+        preds_np = np.array(all_predictions)
+        probs_np = np.array(all_probabilities)
+        per_label_precision, per_label_recall, per_label_f1, _ = precision_recall_fscore_support(
+            targets_np, preds_np, average=None, zero_division=0
+        )
+        micro_p, micro_r, micro_f1, _ = precision_recall_fscore_support(
+            targets_np, preds_np, average="micro", zero_division=0
+        )
+        macro_p, macro_r, macro_f1, _ = precision_recall_fscore_support(
+            targets_np, preds_np, average="macro", zero_division=0
+        )
+        subset_acc = accuracy_score(targets_np, preds_np)
+
+        metrics = {
+            "subset_accuracy": float(subset_acc),
+            "micro_precision": float(micro_p),
+            "micro_recall": float(micro_r),
+            "micro_f1": float(micro_f1),
+            "macro_precision": float(macro_p),
+            "macro_recall": float(macro_r),
+            "macro_f1": float(macro_f1),
+            "decision_thresholds": decision_thresholds,
+            "per_label": {},
+        }
+        for i, name in enumerate(class_names):
+            metrics["per_label"][name] = {
+                "precision": float(per_label_precision[i]),
+                "recall": float(per_label_recall[i]),
+                "f1": float(per_label_f1[i]),
+                "threshold": float(decision_thresholds.get(name, 0.5)),
+                "prevalence": int(targets_np[:, i].sum()),
+            }
+
+        metrics_path = output_dir / "external_test_metrics.json"
+        metrics_path.write_text(json.dumps(metrics, indent=2), encoding="utf-8")
+        print(f"External labeled metrics | subset_accuracy={subset_acc:.4f} | micro_f1={micro_f1:.4f} | macro_f1={macro_f1:.4f}")
+        print(f"Saved external metrics to {metrics_path}")
 
         # save per-image JSON summaries for FusionNet
         try:
@@ -817,6 +1058,8 @@ def main() -> None:
         torch.cuda.manual_seed_all(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Using device: {device}")
+    
     # Inference-only mode: load checkpoint and run external-folder inference
     if getattr(args, "inference_only", False):
         if args.external_test_folder is None:
@@ -828,11 +1071,25 @@ def main() -> None:
         class_names = payload.get("class_names")
         if class_names is None:
             raise ValueError("Checkpoint missing class_names metadata.")
-        model = ChestXRayCNN(num_classes=len(class_names)).to(device)
+        model = ChestXRayCNN(num_classes=len(class_names), pretrained=False).to(device)
         model.load_state_dict(payload["model_state_dict"])
         external_images = _load_external_images(args.external_test_folder, args.image_size)
-        run_external_test_inference(model, external_images, class_names, device, args.output_dir, args.image_size)
+        external_targets = None
+        if args.external_labels_csv is not None:
+            external_targets = _load_external_labels_csv(args.external_labels_csv, class_names)
+        decision_thresholds = _load_thresholds_for_checkpoint(args.checkpoint, class_names)
+        run_external_test_inference(
+            model,
+            external_images,
+            class_names,
+            device,
+            args.output_dir,
+            args.image_size,
+            external_targets=external_targets,
+            decision_thresholds=decision_thresholds,
+        )
         return
+    
     train_loader, val_loader, test_loader, class_names, pos_weight = build_dataloaders(
         data_root=args.data_root,
         batch_size=args.batch_size,
@@ -841,36 +1098,78 @@ def main() -> None:
         seed=args.seed,
     )
 
-    model = ChestXRayCNN(num_classes=len(class_names)).to(device)
+    model = ChestXRayCNN(num_classes=len(class_names), pretrained=True).to(device)
     multi_label = len(class_names) > 2
-    criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(device)) if multi_label and pos_weight is not None else nn.BCEWithLogitsLoss() if multi_label else nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
-
-    print(f"Using dataset root: {_resolve_image_root(args.data_root)}")
-    print(f"Classes detected: {class_names}")
-    print(f"Image size: {args.image_size}x{args.image_size}")
-    if args.max_images and args.max_images > 0:
-        print(f"Training on at most {args.max_images} images")
+    
+    # Use Focal Loss for better handling of class imbalance
+    if getattr(args, "use_focal_loss", True) and multi_label:
+        criterion = FocalLoss(alpha=0.25, gamma=2.0, pos_weight=pos_weight.to(device) if pos_weight is not None else None)
+        print("Using Focal Loss with gamma=2.0 for class imbalance handling")
+    elif multi_label and pos_weight is not None:
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight.to(device))
+        print("Using weighted BCEWithLogitsLoss")
+    elif multi_label:
+        criterion = nn.BCEWithLogitsLoss()
+        print("Using BCEWithLogitsLoss")
     else:
-        print("Training on full dataset")
+        criterion = nn.CrossEntropyLoss()
+        print("Using CrossEntropyLoss (single-label mode)")
+
+    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=5, min_lr=1e-7
+    )
+
+    print(f"\nTraining Configuration:")
+    print(f"  Dataset root: {args.data_root}")
+    print(f"  Classes: {len(class_names)} ({', '.join(class_names[:3])}...)")
+    print(f"  Image size: {args.image_size}x{args.image_size}")
+    print(f"  Batch size: {args.batch_size} (smaller for better gradients on large datasets)")
+    print(f"  Epochs: {args.epochs}")
+    print(f"  Learning rate: {args.learning_rate}")
+    print(f"  Train samples: {len(train_loader.dataset)}")
+    print(f"  Val samples: {len(val_loader.dataset)}")
+    print(f"  Test samples: {len(test_loader.dataset)}")
     if multi_label and pos_weight is not None:
-        print(f"Using class-imbalance weighting: pos_weight shape={tuple(pos_weight.shape)}")
+        print(f"  Class imbalance weights: enabled")
+
+    print(f"\nStarting training with ResNet50 backbone and Focal Loss...\n")
+    
+    best_val_loss = float('inf')
+    patience_counter = 0
+    max_patience = 10
 
     for epoch in range(1, args.epochs + 1):
         epoch_start = __import__("time").time()
         train_loss = train_one_epoch(model, train_loader, criterion, optimizer, device)
         val_loss = evaluate(model, val_loader, criterion, device)
         epoch_seconds = __import__("time").time() - epoch_start
-        if multi_label:
-            print(
-                f"Epoch {epoch}/{args.epochs} | "
-                f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_seconds:.1f}s"
-            )
+        
+        # Learning rate scheduling
+        scheduler.step(val_loss)
+        
+        print(
+            f"Epoch {epoch}/{args.epochs} | "
+            f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_seconds:.1f}s"
+        )
+        
+        # Early stopping with patience
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            # Save best checkpoint
+            checkpoint_path = args.output_dir / "chest_xray_cnn_best.pt"
+            args.output_dir.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "model_state_dict": model.state_dict(),
+                "class_names": class_names,
+            }
+            torch.save(payload, checkpoint_path)
         else:
-            print(
-                f"Epoch {epoch}/{args.epochs} | "
-                f"train_loss={train_loss:.4f} | val_loss={val_loss:.4f} | time={epoch_seconds:.1f}s"
-            )
+            patience_counter += 1
+            if patience_counter >= max_patience:
+                print(f"\nEarly stopping triggered after {epoch} epochs (val_loss not improving)")
+                break
 
     test_loss, test_targets, test_predictions, test_probabilities = collect_test_predictions(
         model,
@@ -878,7 +1177,33 @@ def main() -> None:
         criterion,
         device,
     )
-    print(f"Test set | test_loss={test_loss:.4f}")
+    print(f"\nTest set | test_loss={test_loss:.4f}")
+
+    # Optimize per-class thresholds on validation set
+    optimized_thresholds = optimize_decision_thresholds(model, val_loader, class_names, device)
+
+    # Re-compute predictions with optimized thresholds
+    model.eval()
+    test_targets = []
+    test_predictions = []
+    test_probabilities = []
+    
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+            logits = model(images)
+            probs = torch.sigmoid(logits)
+            
+            # Apply per-class thresholds
+            preds = torch.zeros_like(probs)
+            for class_idx, class_name in enumerate(class_names):
+                threshold = optimized_thresholds.get(class_name, 0.5)
+                preds[:, class_idx] = (probs[:, class_idx] >= threshold).float()
+            
+            test_targets.extend(labels.cpu().tolist())
+            test_predictions.extend(preds.cpu().tolist())
+            test_probabilities.extend(probs.cpu().tolist())
 
     # compute multi-label metrics
     targets_np = np.array(test_targets)
@@ -903,14 +1228,24 @@ def main() -> None:
             "macro_f1": float(macro_f1),
             "subset_accuracy": float(subset_acc),
             "per_label": {},
+            "optimized_thresholds": optimized_thresholds,
         }
         for i, name in enumerate(class_names):
             metrics["per_label"][name] = {
                 "precision": float(per_label_precision[i]),
                 "recall": float(per_label_recall[i]),
                 "f1": float(per_label_f1[i]),
+                "threshold": optimized_thresholds.get(name, 0.5),
                 "prevalence": int(targets_np[:, i].sum()),
             }
+        
+        print(f"\n{'='*70}")
+        print(f"FINAL TEST METRICS (with optimized per-class thresholds)")
+        print(f"{'='*70}")
+        print(f"Micro Precision: {micro_p:.4f} | Micro Recall: {micro_r:.4f} | Micro F1: {micro_f1:.4f}")
+        print(f"Macro Precision: {macro_p:.4f} | Macro Recall: {macro_r:.4f} | Macro F1: {macro_f1:.4f}")
+        print(f"Subset Accuracy: {subset_acc:.4f}")
+        print(f"{'='*70}\n")
     else:
         # fallback single-label metrics
         flat_targets = targets_np.tolist()
@@ -922,6 +1257,7 @@ def main() -> None:
     metrics_path = args.output_dir / "test_metrics.json"
     metrics_path.parent.mkdir(parents=True, exist_ok=True)
     metrics_path.write_text(json.dumps(metrics, indent=2))
+    print(f"Saved test metrics to {metrics_path}")
 
     preview_test_predictions(
         model,
@@ -935,12 +1271,16 @@ def main() -> None:
     )
 
     checkpoint_path = save_checkpoint(model, class_names, args.output_dir)
-    print(f"Saved checkpoint to {checkpoint_path}")
+    print(f"Saved final checkpoint to {checkpoint_path}")
 
     # Run inference on the external input folder after training.
     if getattr(args, "external_test_folder", None) is not None:
         ext_folder = args.external_test_folder
         external_images = _load_external_images(ext_folder, args.image_size)
+        external_targets = None
+        if args.external_labels_csv is not None:
+            external_targets = _load_external_labels_csv(args.external_labels_csv, class_names)
+        decision_thresholds = _load_thresholds_for_checkpoint(args.checkpoint, class_names)
         run_external_test_inference(
             model,
             external_images,
@@ -948,6 +1288,8 @@ def main() -> None:
             device,
             args.output_dir,
             args.image_size,
+            external_targets=external_targets,
+            decision_thresholds=decision_thresholds,
         )
 
 
