@@ -1,0 +1,12 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" fill="none"/>
+  <g stroke="#0077b6" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Lightning bolt -->
+    <path d="M 32 8 L 20 28 L 28 28 L 32 50 L 44 30 L 36 30 Z"/>
+    
+    <!-- Speed lines -->
+    <path d="M 12 20 L 16 20"/>
+    <path d="M 12 32 L 16 32"/>
+    <path d="M 12 44 L 16 44"/>
+  </g>
+</svg>

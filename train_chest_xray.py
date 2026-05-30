@@ -296,6 +296,7 @@ def build_dataloaders(
     max_images: int,
     image_size: int,
     seed: int,
+    num_workers: int,
 ) -> tuple[DataLoader, DataLoader, DataLoader, list[str], torch.Tensor | None]:
     train_transform = _build_train_transform(image_size)
     eval_transform = _build_eval_transform(image_size)
@@ -367,9 +368,25 @@ def build_dataloaders(
 
     pos_weight = _compute_pos_weight_for_subset(train_dataset_source, train_dataset) if csv_path.exists() else None
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
+    train_loader_kwargs = {
+        "batch_size": batch_size,
+        "shuffle": True,
+        "num_workers": max(0, num_workers),
+    }
+    eval_loader_kwargs = {
+        "batch_size": batch_size,
+        "shuffle": False,
+        "num_workers": max(0, num_workers),
+    }
+    if num_workers > 0:
+        train_loader_kwargs["persistent_workers"] = True
+        train_loader_kwargs["prefetch_factor"] = 2
+        eval_loader_kwargs["persistent_workers"] = True
+        eval_loader_kwargs["prefetch_factor"] = 2
+
+    train_loader = DataLoader(train_dataset, **train_loader_kwargs)
+    val_loader = DataLoader(val_dataset, **eval_loader_kwargs)
+    test_loader = DataLoader(test_dataset, **eval_loader_kwargs)
     return train_loader, val_loader, test_loader, class_names, pos_weight
 
 
@@ -858,6 +875,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--image-size", type=int, default=224, help="Resize images to this square size.")
     parser.add_argument("--batch-size", type=int, default=8, help="Batch size for training and validation (reduced to 8 for better gradient signals).")
+    parser.add_argument("--num-workers", type=int, default=6, help="DataLoader worker processes for faster CPU/GPU input pipeline.")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs (default: 100 for convergence with large datasets).")
     parser.add_argument("--learning-rate", type=float, default=1e-4, help="Adam learning rate (reduced for pretrained backbone).")
     parser.add_argument("--output-dir", type=Path, default=Path("outputs"), help="Directory to save checkpoints.")
@@ -1239,6 +1257,7 @@ def main() -> None:
         max_images=args.max_images,
         image_size=args.image_size,
         seed=args.seed,
+        num_workers=args.num_workers,
     )
 
     model = ChestXRayCNN(num_classes=len(class_names), pretrained=True).to(device)
