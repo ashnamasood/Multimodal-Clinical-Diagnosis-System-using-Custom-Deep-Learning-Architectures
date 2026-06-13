@@ -330,6 +330,12 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--image-size", type=int, default=128)
     p.add_argument("--batch-size", type=int, default=32)
     p.add_argument("--epochs", type=int, default=25)
+    p.add_argument(
+        "--early-stopping-patience",
+        type=int,
+        default=0,
+        help="Stop after this many epochs without val-loss improvement (0 = disabled).",
+    )
     p.add_argument("--learning-rate", type=float, default=1e-3)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--gradcam-samples", type=int, default=5, help="Val samples for Grad-CAM PNGs (0 to skip).")
@@ -406,6 +412,7 @@ def main() -> None:
 
     best_val = float("inf")
     best_state: dict[str, torch.Tensor] | None = None
+    epochs_without_improvement = 0
 
     for epoch in range(1, args.epochs + 1):
         tr = train_one_epoch(model, train_loader, criterion, optimizer, device, log_interval=max(50, len(train_loader)))
@@ -414,6 +421,16 @@ def main() -> None:
         if va < best_val:
             best_val = va
             best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
+            epochs_without_improvement = 0
+        else:
+            epochs_without_improvement += 1
+            if args.early_stopping_patience > 0 and epochs_without_improvement >= args.early_stopping_patience:
+                print(
+                    f"Early stopping at epoch {epoch} "
+                    f"(val_loss did not improve for {args.early_stopping_patience} epochs).",
+                    flush=True,
+                )
+                break
 
     if best_state is not None:
         model.load_state_dict(best_state)
