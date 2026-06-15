@@ -1,0 +1,461 @@
+{
+  "checkpoint": "C:\\Users\\nauma\\Desktop\\GlobalHealth\\Multimodal-Clinical-Diagnosis-System-using-Custom-Deep-Learning-Architectures\\XRay-Pneumonia\\outputs\\xray\\xray_cnn.pt",
+  "image_size": 128,
+  "test_samples": 624,
+  "accuracy": 0.8205128205128205,
+  "macro_f1": 0.784189723320158,
+  "macro_precision": 0.869448674992385,
+  "macro_recall": 0.7658119658119659,
+  "confusion_matrix": {
+    "labels": [
+      "NORMAL",
+      "PNEUMONIA"
+    ],
+    "matrix": [
+      [
+        128,
+        106
+      ],
+      [
+        6,
+        384
+      ]
+    ]
+  },
+  "per_class": {
+    "NORMAL": {
+      "precision": 0.9552238805970149,
+      "recall": 0.5470085470085471,
+      "f1": 0.6956521739130435,
+      "support": 234
+    },
+    "PNEUMONIA": {
+      "precision": 0.7836734693877551,
+      "recall": 0.9846153846153847,
+      "f1": 0.8727272727272727,
+      "support": 390
+    }
+  },
+  "confidence": {
+    "mean_correct": 0.9345542583614588,
+    "mean_incorrect": 0.8584627322852612,
+    "median_all": 0.9915097653865814
+  },
+  "misclassified_count": 112,
+  "classification_report": "              precision    recall  f1-score   support\n\n      NORMAL       0.96      0.55      0.70       234\n   PNEUMONIA       0.78      0.98      0.87       390\n\n    accuracy                           0.82       624\n   macro avg       0.87      0.77      0.78       624\nweighted avg       0.85      0.82      0.81       624\n",
+  "sample_predictions": [
+    {
+      "file": "IM-0001-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.5631,
+      "probabilities": {
+        "NORMAL": 0.5631,
+        "PNEUMONIA": 0.4369
+      }
+    },
+    {
+      "file": "IM-0003-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "PNEUMONIA",
+      "correct": false,
+      "confidence": 0.8403,
+      "probabilities": {
+        "PNEUMONIA": 0.8403,
+        "NORMAL": 0.1597
+      }
+    },
+    {
+      "file": "IM-0005-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.903,
+      "probabilities": {
+        "NORMAL": 0.903,
+        "PNEUMONIA": 0.097
+      }
+    },
+    {
+      "file": "IM-0006-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.8655,
+      "probabilities": {
+        "NORMAL": 0.8655,
+        "PNEUMONIA": 0.1345
+      }
+    },
+    {
+      "file": "IM-0007-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.9663,
+      "probabilities": {
+        "NORMAL": 0.9663,
+        "PNEUMONIA": 0.0337
+      }
+    },
+    {
+      "file": "IM-0009-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.873,
+      "probabilities": {
+        "NORMAL": 0.873,
+        "PNEUMONIA": 0.127
+      }
+    },
+    {
+      "file": "IM-0010-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.7097,
+      "probabilities": {
+        "NORMAL": 0.7097,
+        "PNEUMONIA": 0.2903
+      }
+    },
+    {
+      "file": "IM-0011-0001-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.7522,
+      "probabilities": {
+        "NORMAL": 0.7522,
+        "PNEUMONIA": 0.2478
+      }
+    },
+    {
+      "file": "IM-0011-0001-0002.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "PNEUMONIA",
+      "correct": false,
+      "confidence": 0.5064,
+      "probabilities": {
+        "PNEUMONIA": 0.5064,
+        "NORMAL": 0.4936
+      }
+    },
+    {
+      "file": "IM-0011-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.8086,
+      "probabilities": {
+        "NORMAL": 0.8086,
+        "PNEUMONIA": 0.1914
+      }
+    },
+    {
+      "file": "IM-0013-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.8654,
+      "probabilities": {
+        "NORMAL": 0.8654,
+        "PNEUMONIA": 0.1346
+      }
+    },
+    {
+      "file": "IM-0015-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "PNEUMONIA",
+      "correct": false,
+      "confidence": 0.8612,
+      "probabilities": {
+        "PNEUMONIA": 0.8612,
+        "NORMAL": 0.1388
+      }
+    },
+    {
+      "file": "IM-0016-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.7879,
+      "probabilities": {
+        "NORMAL": 0.7879,
+        "PNEUMONIA": 0.2121
+      }
+    },
+    {
+      "file": "IM-0017-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "NORMAL",
+      "correct": true,
+      "confidence": 0.5513,
+      "probabilities": {
+        "NORMAL": 0.5513,
+        "PNEUMONIA": 0.4487
+      }
+    },
+    {
+      "file": "IM-0019-0001.jpeg",
+      "true_class": "NORMAL",
+      "predicted_class": "PNEUMONIA",
+      "correct": false,
+      "confidence": 0.8638,
+      "probabilities": {
+        "PNEUMONIA": 0.8638,
+        "NORMAL": 0.1362
+      }
+    },
+    {
+      "file": "person100_bacteria_475.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9611,
+      "probabilities": {
+        "PNEUMONIA": 0.9611,
+        "NORMAL": 0.0389
+      }
+    },
+    {
+      "file": "person100_bacteria_477.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9994,
+      "probabilities": {
+        "PNEUMONIA": 0.9994,
+        "NORMAL": 0.0006
+      }
+    },
+    {
+      "file": "person100_bacteria_478.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9999,
+      "probabilities": {
+        "PNEUMONIA": 0.9999,
+        "NORMAL": 0.0001
+      }
+    },
+    {
+      "file": "person100_bacteria_479.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9998,
+      "probabilities": {
+        "PNEUMONIA": 0.9998,
+        "NORMAL": 0.0002
+      }
+    },
+    {
+      "file": "person100_bacteria_480.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9999,
+      "probabilities": {
+        "PNEUMONIA": 0.9999,
+        "NORMAL": 0.0001
+      }
+    },
+    {
+      "file": "person100_bacteria_481.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9998,
+      "probabilities": {
+        "PNEUMONIA": 0.9998,
+        "NORMAL": 0.0002
+      }
+    },
+    {
+      "file": "person100_bacteria_482.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9992,
+      "probabilities": {
+        "PNEUMONIA": 0.9992,
+        "NORMAL": 0.0008
+      }
+    },
+    {
+      "file": "person101_bacteria_483.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9997,
+      "probabilities": {
+        "PNEUMONIA": 0.9997,
+        "NORMAL": 0.0003
+      }
+    },
+    {
+      "file": "person101_bacteria_484.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.8912,
+      "probabilities": {
+        "PNEUMONIA": 0.8912,
+        "NORMAL": 0.1088
+      }
+    },
+    {
+      "file": "person101_bacteria_485.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9982,
+      "probabilities": {
+        "PNEUMONIA": 0.9982,
+        "NORMAL": 0.0018
+      }
+    },
+    {
+      "file": "person101_bacteria_486.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9999,
+      "probabilities": {
+        "PNEUMONIA": 0.9999,
+        "NORMAL": 0.0001
+      }
+    },
+    {
+      "file": "person102_bacteria_487.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9961,
+      "probabilities": {
+        "PNEUMONIA": 0.9961,
+        "NORMAL": 0.0039
+      }
+    },
+    {
+      "file": "person103_bacteria_488.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9999,
+      "probabilities": {
+        "PNEUMONIA": 0.9999,
+        "NORMAL": 0.0001
+      }
+    },
+    {
+      "file": "person103_bacteria_489.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9991,
+      "probabilities": {
+        "PNEUMONIA": 0.9991,
+        "NORMAL": 0.0009
+      }
+    },
+    {
+      "file": "person103_bacteria_490.jpeg",
+      "true_class": "PNEUMONIA",
+      "predicted_class": "PNEUMONIA",
+      "correct": true,
+      "confidence": 0.9986,
+      "probabilities": {
+        "PNEUMONIA": 0.9986,
+        "NORMAL": 0.0014
+      }
+    }
+  ],
+  "input_folder_predictions": [
+    {
+      "file": "Atelectasis.jpeg",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.977,
+      "probabilities": {
+        "PNEUMONIA": 0.977,
+        "NORMAL": 0.023
+      }
+    },
+    {
+      "file": "edema.png",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.9666,
+      "probabilities": {
+        "PNEUMONIA": 0.9666,
+        "NORMAL": 0.0334
+      }
+    },
+    {
+      "file": "Effusion.jpeg",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.9986,
+      "probabilities": {
+        "PNEUMONIA": 0.9986,
+        "NORMAL": 0.0014
+      }
+    },
+    {
+      "file": "fibrosis.jpeg",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.9947,
+      "probabilities": {
+        "PNEUMONIA": 0.9947,
+        "NORMAL": 0.0053
+      }
+    },
+    {
+      "file": "Infiltration.jpg",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.6693,
+      "probabilities": {
+        "PNEUMONIA": 0.6693,
+        "NORMAL": 0.3307
+      }
+    },
+    {
+      "file": "normal_sample.jpeg",
+      "predicted_class": "NORMAL",
+      "confidence": 0.903,
+      "probabilities": {
+        "NORMAL": 0.903,
+        "PNEUMONIA": 0.097
+      }
+    },
+    {
+      "file": "pleural thickening.jpeg",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.9966,
+      "probabilities": {
+        "PNEUMONIA": 0.9966,
+        "NORMAL": 0.0034
+      }
+    },
+    {
+      "file": "pnemunia.png",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.9755,
+      "probabilities": {
+        "PNEUMONIA": 0.9755,
+        "NORMAL": 0.0245
+      }
+    },
+    {
+      "file": "pneumonia_sample.jpeg",
+      "predicted_class": "PNEUMONIA",
+      "confidence": 0.9994,
+      "probabilities": {
+        "PNEUMONIA": 0.9994,
+        "NORMAL": 0.0006
+      }
+    }
+  ]
+}

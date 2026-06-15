@@ -1,78 +1,51 @@
 from __future__ import annotations
 
 import importlib
-import io
+import importlib.util
 import json
 import sys
 from pathlib import Path
 from typing import Any
 
-import torch
-from PIL import Image
-from torchvision import transforms
-
 ROOT = Path(__file__).resolve().parents[1]
 HEART_SKIN_DIR = ROOT / "Heart&SkinCancer"
+XRAY_DIR = ROOT / "XRay-Pneumonia"
 
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
 
-from train_chest_xray import (  # noqa: E402
-    ChestXRayCNN,
-    _format_clinical_prediction,
-    _load_checkpoint_payload,
-    _load_thresholds_for_checkpoint,
-    _resolve_checkpoint_path,
-)
+def _load_xray_inference_class():
+    module_path = XRAY_DIR / "inference.py"
+    if not module_path.is_file():
+        raise ImportError(f"X-ray inference module not found: {module_path}")
+    spec = importlib.util.spec_from_file_location("xray_pneumonia_inference", module_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load X-ray inference module: {module_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.XRayInference
 
 
 class ModelHub:
     def __init__(self, device: str = "cpu") -> None:
-        self.device = torch.device(device if torch.cuda.is_available() or device == "cpu" else "cpu")
-
-        self._xray_model: ChestXRayCNN | None = None
-        self._xray_class_names: list[str] = []
-        self._xray_thresholds: dict[str, float] = {}
-        self._xray_transform = transforms.Compose(
-            [
-                transforms.Grayscale(num_output_channels=3),
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-            ]
-        )
-
+        self.device = device
+        self._xray = None
         self._heart = None
         self._skin = None
-
         self._load_xray()
         self._load_heart_skin()
 
     def availability(self) -> dict[str, bool]:
         return {
-            "xray": self._xray_model is not None,
+            "xray": self._xray is not None,
             "heart": self._heart is not None,
             "skin": self._skin is not None,
         }
 
     def _load_xray(self) -> None:
-        checkpoint_path = ROOT / "outputs" / "chest_xray_cnn.pt"
-        resolved = _resolve_checkpoint_path(checkpoint_path)
-        if not resolved.exists():
-            return
-
-        payload = _load_checkpoint_payload(resolved, self.device)
-        class_names = payload.get("class_names")
-        if not isinstance(class_names, list) or not class_names:
-            return
-
-        model = ChestXRayCNN(num_classes=len(class_names), pretrained=False).to(self.device)
-        model.load_state_dict(payload["model_state_dict"])
-        model.eval()
-
-        self._xray_model = model
-        self._xray_class_names = class_names
-        self._xray_thresholds = _load_thresholds_for_checkpoint(resolved, class_names)
+        try:
+            xray_cls = _load_xray_inference_class()
+            self._xray = xray_cls.from_default_paths(XRAY_DIR)
+        except Exception:
+            self._xray = None
 
     def _load_heart_skin(self) -> None:
         if str(HEART_SKIN_DIR) not in sys.path:
@@ -92,30 +65,28 @@ class ModelHub:
         except Exception:
             self._skin = None
 
-    @torch.no_grad()
     def predict_xray_bytes(self, data: bytes) -> dict[str, Any]:
-        if self._xray_model is None:
-            return {"available": False, "error": "Chest X-ray model checkpoint not found."}
+        if self._xray is None:
+            return {
+                "available": False,
+                "error": "Chest X-ray model checkpoint not found. Run XRay-Pneumonia/train_xray_cnn.py first.",
+            }
 
-        image = Image.open(io.BytesIO(data)).convert("RGB")
-        tensor = self._xray_transform(image).unsqueeze(0).to(self.device)
-        logits = self._xray_model(tensor)
-        probs_t = torch.sigmoid(logits).squeeze(0).cpu().tolist()
+        out = self._xray.predict_bytes(data)
+        predicted_class = out["predicted_class"]
+        confidence = float(out["confidence"])
+        ranked = sorted(out["probabilities"].items(), key=lambda item: item[1], reverse=True)
+        predicted_labels = [predicted_class] if predicted_class == "PNEUMONIA" else []
 
-        display_text, labels, _, headline_conf = _format_clinical_prediction(
-            probs_t,
-            self._xray_class_names,
-            self._xray_thresholds,
-        )
-
-        ranked = sorted(zip(self._xray_class_names, probs_t), key=lambda x: x[1], reverse=True)
         return {
             "available": True,
-            "display_text": display_text,
-            "predicted_labels": labels,
-            "headline_confidence": float(headline_conf),
-            "top5": [{"label": k, "confidence": float(v)} for k, v in ranked[:5]],
-            "thresholds": self._xray_thresholds,
+            "display_text": f"{predicted_class} ({confidence:.2f})",
+            "predicted_labels": predicted_labels,
+            "predicted_class": predicted_class,
+            "headline_confidence": confidence,
+            "top5": [{"label": label, "confidence": float(prob)} for label, prob in ranked],
+            "probabilities": out["probabilities"],
+            "gradcam_image": out.get("gradcam_image"),
         }
 
     def predict_skin_bytes(self, data: bytes) -> dict[str, Any]:
@@ -123,11 +94,19 @@ class ModelHub:
             return {"available": False, "error": "Skin model checkpoint not found."}
 
         out = self._skin.predict_bytes(data)
+        ranked = sorted(out["probabilities"].items(), key=lambda item: item[1], reverse=True)
+        predicted_class = out["predicted_class"]
+        confidence = float(out["confidence"])
         return {
             "available": True,
-            "predicted_class": out["predicted_class"],
-            "confidence": float(out["confidence"]),
+            "display_text": f"{predicted_class} ({confidence:.2f})",
+            "predicted_class": predicted_class,
+            "confidence": confidence,
+            "headline_confidence": confidence,
             "top3": [{"label": c, "confidence": float(p)} for c, p in out["top3"]],
+            "top5": [{"label": label, "confidence": float(prob)} for label, prob in ranked[:5]],
+            "probabilities": out["probabilities"],
+            "gradcam_image": out.get("gradcam_image"),
         }
 
     def predict_heart(self, features: dict[str, Any]) -> dict[str, Any]:
@@ -137,11 +116,17 @@ class ModelHub:
         out = self._heart.predict_features(features)
         probs = out.get("probabilities", {})
         ranked = sorted(probs.items(), key=lambda x: x[1], reverse=True)
+        predicted_class = out["predicted_class"]
+        confidence = float(out["confidence"])
         return {
             "available": True,
-            "predicted_class": out["predicted_class"],
-            "confidence": float(out["confidence"]),
+            "display_text": f"{predicted_class} ({confidence:.2f})",
+            "predicted_class": predicted_class,
+            "confidence": confidence,
+            "probability": confidence,
+            "headline_confidence": confidence,
             "top2": [{"label": c, "confidence": float(p)} for c, p in ranked[:2]],
+            "probabilities": probs,
         }
 
     def fused_assessment(self, xray: dict[str, Any] | None, skin: dict[str, Any] | None, heart: dict[str, Any] | None) -> dict[str, Any]:

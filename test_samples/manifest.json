@@ -1,0 +1,135 @@
+{
+  "xray": [
+    {
+      "file": "xray/normal.jpeg",
+      "expected": "NORMAL",
+      "note": "Adult normal chest"
+    },
+    {
+      "file": "xray/normal_02.jpeg",
+      "expected": "NORMAL",
+      "note": "Official test split"
+    },
+    {
+      "file": "xray/normal_03.jpeg",
+      "expected": "NORMAL",
+      "note": "Official test split"
+    },
+    {
+      "file": "xray/normal_04.jpeg",
+      "expected": "NORMAL",
+      "note": "Official test split"
+    },
+    {
+      "file": "xray/pneumonia.jpeg",
+      "expected": "PNEUMONIA",
+      "note": "Clear bacterial pneumonia"
+    },
+    {
+      "file": "xray/pneumonia_02.jpeg",
+      "expected": "PNEUMONIA",
+      "note": "Official test split"
+    },
+    {
+      "file": "xray/pneumonia_03.jpeg",
+      "expected": "PNEUMONIA",
+      "note": "Official test split"
+    },
+    {
+      "file": "xray/pneumonia_04.jpeg",
+      "expected": "PNEUMONIA",
+      "note": "Official test split"
+    },
+    {
+      "file": "xray/pneumonia_bacterial.jpeg",
+      "expected": "PNEUMONIA",
+      "note": "Bacterial pneumonia sample"
+    }
+  ],
+  "skin": [
+    {
+      "file": "skin/lesion_akiec.jpg",
+      "expected_class": "akiec",
+      "note": "Raw HMNIST lesion (akiec)"
+    },
+    {
+      "file": "skin/lesion_akiec_02.jpg",
+      "expected_class": "akiec",
+      "note": "Raw HMNIST lesion (akiec)"
+    },
+    {
+      "file": "skin/lesion_bcc.jpg",
+      "expected_class": "bcc",
+      "note": "Raw HMNIST lesion (bcc)"
+    },
+    {
+      "file": "skin/lesion_bcc_02.jpg",
+      "expected_class": "bcc",
+      "note": "Raw HMNIST lesion (bcc)"
+    },
+    {
+      "file": "skin/lesion_bkl.jpg",
+      "expected_class": "bkl",
+      "note": "Raw HMNIST lesion (bkl)"
+    },
+    {
+      "file": "skin/lesion_bkl_02.jpg",
+      "expected_class": "bkl",
+      "note": "Raw HMNIST lesion (bkl)"
+    },
+    {
+      "file": "skin/lesion_df.jpg",
+      "expected_class": "df",
+      "note": "Raw HMNIST lesion (df)"
+    },
+    {
+      "file": "skin/lesion_df_02.jpg",
+      "expected_class": "df",
+      "note": "Raw HMNIST lesion (df)"
+    },
+    {
+      "file": "skin/lesion_nv.jpg",
+      "expected_class": "nv",
+      "note": "Raw HMNIST lesion (nv)"
+    },
+    {
+      "file": "skin/lesion_nv_02.jpg",
+      "expected_class": "nv",
+      "note": "Raw HMNIST lesion (nv)"
+    },
+    {
+      "file": "skin/lesion_mel.jpg",
+      "expected_class": "mel",
+      "note": "Raw HMNIST lesion (mel)"
+    },
+    {
+      "file": "skin/lesion_mel_02.jpg",
+      "expected_class": "mel",
+      "note": "Raw HMNIST lesion (mel)"
+    },
+    {
+      "file": "skin/lesion_vasc.jpg",
+      "expected_class": "vasc",
+      "note": "Raw HMNIST lesion (vasc)"
+    },
+    {
+      "file": "skin/lesion_vasc_02.jpg",
+      "expected_class": "vasc",
+      "note": "Raw HMNIST lesion (vasc)"
+    }
+  ],
+  "heart": [
+    {
+      "file": "heart/sample_low_risk.json",
+      "note": "Typical low-risk profile"
+    },
+    {
+      "file": "heart/sample_moderate_risk.json",
+      "note": "Mixed risk factors"
+    },
+    {
+      "file": "heart/sample_high_risk.json",
+      "note": "Higher-risk profile (chest pain, ST slope flat)"
+    }
+  ]
+}

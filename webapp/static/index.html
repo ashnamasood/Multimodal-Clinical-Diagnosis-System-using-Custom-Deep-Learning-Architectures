@@ -3,185 +3,262 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FusionNet-Scratch | Multimodal Clinical Diagnosis System</title>
+  <title>FusionNet Clinical Dashboard | Multimodal Diagnosis</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
-  <header class="site-header sticky">
-    <div class="site-brand">
-      <img src="/static/assets/logo.svg" alt="FusionNet" onerror="this.style.display='none'" />
-      <div>
-        <h1>FusionNet-Scratch</h1>
-        <p class="subtitle">Multimodal Clinical Diagnosis System</p>
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Primary navigation">
+      <div class="sidebar-brand">
+        <img src="/static/assets/logo.svg" alt="" width="44" height="44" onerror="this.style.display='none'" />
+        <div>
+          <h1>FusionNet</h1>
+          <p class="subtitle">Clinical AI dashboard</p>
+        </div>
       </div>
+      <nav class="sidebar-nav">
+        <button class="nav-btn active" type="button" data-tab="home">
+          <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-home"></use></svg>
+          Overview
+        </button>
+        <button class="nav-btn" type="button" data-tab="predict">
+          <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-predict"></use></svg>
+          Diagnosis
+        </button>
+        <button class="nav-btn" type="button" data-tab="how-it-works">
+          <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-info"></use></svg>
+          Models
+        </button>
+        <button class="nav-btn" type="button" data-tab="faq">
+          <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-help"></use></svg>
+          FAQ
+        </button>
+      </nav>
+    </aside>
+
+    <div class="main-wrap">
+      <header class="topbar">
+        <p class="topbar-title" id="page-title">Clinical overview</p>
+        <div id="model-status" class="topbar-status" aria-live="polite"></div>
+      </header>
+
+      <nav class="mobile-nav" aria-label="Mobile navigation">
+        <button class="nav-btn active" type="button" data-tab="home">Overview</button>
+        <button class="nav-btn" type="button" data-tab="predict">Diagnosis</button>
+        <button class="nav-btn" type="button" data-tab="how-it-works">Models</button>
+        <button class="nav-btn" type="button" data-tab="faq">FAQ</button>
+      </nav>
+
+      <main id="main-content" class="container">
+        <div class="disclaimer-banner" role="note">
+          <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-alert"></use></svg>
+          <span>Research prototype for decision support only. Results must be reviewed by qualified clinicians before any clinical action.</span>
+        </div>
+
+        <section id="home" class="tab active" aria-labelledby="page-title">
+          <div class="hero card">
+            <div class="hero-grid">
+              <div class="hero-copy">
+                <div class="eyebrow">AI-assisted diagnostic support</div>
+                <h2>One calm workspace for multimodal clinical review.</h2>
+                <p>Upload a chest X-ray, optionally include a skin lesion image and cardiac vitals, and receive structured findings with confidence-ranked analytics and a fused risk summary.</p>
+                <div class="hero-actions">
+                  <button class="primary" type="button" data-tab-link="predict">Start diagnosis</button>
+                  <button class="ghost" type="button" data-tab-link="how-it-works">View model details</button>
+                </div>
+                <div class="metric-row">
+                  <div class="stat-card"><strong>3</strong><span>modalities</span></div>
+                  <div class="stat-card"><strong>1</strong><span>fusion engine</span></div>
+                  <div class="stat-card"><strong>Local</strong><span>CPU inference</span></div>
+                </div>
+              </div>
+              <div class="hero-media">
+                <img src="/static/assets/dashboard-illustration.svg" alt="Clinical dashboard illustration" />
+              </div>
+            </div>
+          </div>
+
+          <div class="cards-grid info-grid">
+            <article class="card info-card">
+              <img src="/static/assets/feature-diagnostic.svg" alt="" width="48" height="48" />
+              <h3>Structured findings</h3>
+              <p>Per-modality predictions with readable confidence bars and probability charts.</p>
+            </article>
+            <article class="card info-card">
+              <img src="/static/assets/feature-private.svg" alt="" width="48" height="48" />
+              <h3>Privacy-first</h3>
+              <p>Designed for on-premise deployment so patient data stays in your environment.</p>
+            </article>
+            <article class="card info-card">
+              <img src="/static/assets/feature-fast.svg" alt="" width="48" height="48" />
+              <h3>Rapid triage</h3>
+              <p>Fast CPU inference for teaching, demo, and operational prototyping workflows.</p>
+            </article>
+          </div>
+
+          <div class="section-card card">
+            <div class="section-heading">
+              <div class="eyebrow">Workflow</div>
+              <h2>Explore the system</h2>
+            </div>
+            <div class="steps-grid">
+              <div class="step-card"><span>01</span><h3>Diagnosis</h3><p>Upload imaging and cardiac features, then review modality outputs in one dashboard.</p></div>
+              <div class="step-card"><span>02</span><h3>Models</h3><p>Learn how X-ray, skin, and heart models are trained and fused into a single risk score.</p></div>
+              <div class="step-card"><span>03</span><h3>FAQ</h3><p>Find answers about usage, limitations, and safe deployment expectations.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="predict" class="tab" aria-label="Diagnosis workspace">
+          <div class="dashboard-overview" aria-label="Session status">
+            <div class="overview-card">
+              <div class="label">X-ray model</div>
+              <div class="value" id="ov-xray">Checking…</div>
+            </div>
+            <div class="overview-card">
+              <div class="label">Skin model</div>
+              <div class="value" id="ov-skin">Checking…</div>
+            </div>
+            <div class="overview-card">
+              <div class="label">Cardiac model</div>
+              <div class="value" id="ov-heart">Checking…</div>
+            </div>
+            <div class="overview-card">
+              <div class="label">Fusion risk</div>
+              <div class="value" id="ov-fusion">Awaiting run</div>
+            </div>
+          </div>
+
+          <div id="alert-region" aria-live="assertive"></div>
+
+          <div class="predict-shell">
+            <form id="predict-form" class="card form-card" aria-label="Patient input form">
+              <div class="section-heading">
+                <div class="eyebrow">Patient inputs</div>
+                <h2>Run multimodal analysis</h2>
+              </div>
+
+              <div class="form-row">
+                <label for="xray">Chest X-ray image</label>
+                <div class="file-drop">
+                  <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-upload"></use></svg>
+                  <input id="xray" name="chest_xray_image" type="file" accept="image/*" />
+                  <span class="hint">PNG or JPEG — pediatric or adult radiographs</span>
+                </div>
+                <div id="xray-preview" class="img-preview" aria-hidden="true"></div>
+              </div>
+
+              <div class="form-row">
+                <label for="skin">Skin lesion image (optional)</label>
+                <div class="file-drop">
+                  <svg class="icon" aria-hidden="true"><use href="/static/icons.svg#icon-upload"></use></svg>
+                  <input id="skin" name="skin_image" type="file" accept="image/*" />
+                  <span class="hint">Dermatoscopic or clinical photo</span>
+                </div>
+                <div id="skin-preview" class="img-preview" aria-hidden="true"></div>
+              </div>
+
+              <div class="divider"></div>
+              <h3>Cardiac / blood features</h3>
+              <div id="heart-fields" class="small-grid"></div>
+
+              <div class="form-actions">
+                <button id="predict-btn" type="submit" class="primary">Run analysis</button>
+                <button id="reset-btn" type="button" class="ghost">Reset form</button>
+              </div>
+            </form>
+
+            <aside class="card result-card" aria-label="Analysis results">
+              <div class="result-header">
+                <div>
+                  <div class="eyebrow">Analysis dashboard</div>
+                  <h3>Prediction results</h3>
+                </div>
+              </div>
+
+              <div id="results-content" class="results-content">
+                <div id="empty-state" class="empty-state">
+                  <svg class="icon" aria-hidden="true" style="width:32px;height:32px;color:var(--primary)"><use href="/static/icons.svg#icon-predict"></use></svg>
+                  <h4>No results yet</h4>
+                  <p>Submit patient inputs to view modality predictions, probability charts, and fused risk guidance.</p>
+                </div>
+
+                <div id="results-panel" hidden>
+                  <div id="fusion-summary" class="fusion-summary risk-unknown">
+                    <div class="risk">Overall risk: <span id="risk-level">—</span></div>
+                    <div id="risk-bar" class="risk-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Overall fusion risk score">
+                      <div id="risk-bar-fill"></div>
+                    </div>
+                    <p id="fusion-recommendation" class="fusion-note"></p>
+                    <ul id="fusion-notes" class="fusion-notes"></ul>
+                  </div>
+
+                  <div class="mini-grid">
+                    <div id="xray-output" class="output-card" aria-live="polite"></div>
+                    <div id="skin-output" class="output-card" aria-live="polite"></div>
+                    <div id="heart-output" class="output-card full" aria-live="polite"></div>
+                  </div>
+
+                  <div class="raw-json-toggle">
+                    <button id="toggle-json" type="button" class="ghost small">View raw JSON</button>
+                  </div>
+                  <pre id="result" class="raw-json" hidden></pre>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section id="how-it-works" class="tab card section-card">
+          <div class="section-heading">
+            <div class="eyebrow">How it works</div>
+            <h2>Model and training details</h2>
+          </div>
+          <div class="steps-grid">
+            <div class="step-card"><span>01</span><h3>Chest X-ray (pneumonia)</h3><p>Custom CNN trained on the Kaggle chest X-ray pneumonia dataset for Normal vs Pneumonia classification with Grad-CAM explainability.</p></div>
+            <div class="step-card"><span>02</span><h3>Skin and heart models</h3><p>HMNIST skin lesion CNN and UCI heart-disease MLP integrate when checkpoints are available on the server.</p></div>
+            <div class="step-card"><span>03</span><h3>Fusion logic</h3><p>The backend merges modality outputs into a single risk score, recommendation, and supporting clinical notes.</p></div>
+          </div>
+          <div class="section-note">
+            <p><strong>Inference flow:</strong> upload → preprocess → per-modality inference → confidence ranking → fused clinical summary.</p>
+            <p><strong>Limitations:</strong> models are research prototypes and must not replace expert medical judgment or formal reporting.</p>
+          </div>
+        </section>
+
+        <section id="faq" class="tab card section-card">
+          <div class="section-heading">
+            <div class="eyebrow">FAQ</div>
+            <h2>Common questions</h2>
+          </div>
+          <details open>
+            <summary>What does the system do?</summary>
+            <p>It combines available modality outputs and presents a single review dashboard for clinical decision support.</p>
+          </details>
+          <details>
+            <summary>Can I use only the chest X-ray model?</summary>
+            <p>Yes. The interface handles missing skin or heart inputs and still returns chest X-ray results with fusion scoring where applicable.</p>
+          </details>
+          <details>
+            <summary>Why are some models unavailable?</summary>
+            <p>Skin and heart models are optional. If checkpoints are missing, the app continues with whichever models are loaded.</p>
+          </details>
+          <details>
+            <summary>Is this a medical device?</summary>
+            <p>No. This demo is for research and educational use and should not replace professional medical judgment.</p>
+          </details>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <p class="small">© 2026 FusionNet-Scratch — Research prototype</p>
+      </footer>
     </div>
-    <nav class="nav">
-      <button class="nav-btn active" data-tab="home">Home</button>
-      <button class="nav-btn" data-tab="predict">Predict</button>
-      <button class="nav-btn" data-tab="how-it-works">How it works</button>
-      <button class="nav-btn" data-tab="faq">FAQ</button>
-    </nav>
-  </header>
-
-  <main class="container">
-    <section id="home" class="tab active">
-      <div class="hero card">
-        <div class="hero-grid">
-          <div class="hero-copy">
-            <div class="eyebrow">AI-assisted diagnostic support</div>
-            <h2>FusionNet-Scratch brings multimodal clinical review into one clean workspace.</h2>
-            <p>Upload a chest X-ray, optionally include a skin image and cardiac data, and get a structured diagnostic summary with confidence-ranked findings.</p>
-            <div class="hero-actions">
-              <button class="primary" data-tab-link="predict">Let's predict</button>
-              <button class="ghost" data-tab-link="how-it-works">Learn how it works</button>
-            </div>
-            <div class="metric-row">
-              <div><strong>3</strong><span>modalities</span></div>
-              <div><strong>1</strong><span>clinical dashboard</span></div>
-              <div><strong>Fast</strong><span>CPU-ready inference</span></div>
-            </div>
-          </div>
-          <div class="hero-media">
-            <img src="/static/assets/dashboard-illustration.svg" alt="Dashboard illustration" />
-          </div>
-        </div>
-      </div>
-
-      <div class="cards-grid info-grid">
-        <div class="card info-card">
-          <img src="/static/assets/feature-diagnostic.svg" alt="diagnostic support"/>
-          <h3>Diagnostic support</h3>
-          <p>Confidence-ranked findings and an overall fusion risk score.</p>
-        </div>
-        <div class="card info-card">
-          <img src="/static/assets/feature-private.svg" alt="private"/>
-          <h3>Private workflow</h3>
-          <p>Designed for local deployment so your data stays under your control.</p>
-        </div>
-        <div class="card info-card">
-          <img src="/static/assets/feature-fast.svg" alt="fast"/>
-          <h3>Fast review</h3>
-          <p>Use it as a triage layer before deeper review or formal reporting.</p>
-        </div>
-      </div>
-
-      <div class="section-card card">
-        <div class="section-heading">
-          <div class="eyebrow">What you can do</div>
-          <h2>Explore the full system</h2>
-        </div>
-        <div class="steps-grid">
-          <div class="step-card"><span>01</span><h3>Predict</h3><p>Upload images and patient features, then see model outputs in a clinical dashboard.</p></div>
-          <div class="step-card"><span>02</span><h3>How it works</h3><p>Read the training setup, model architecture, and how the pipeline is stitched together.</p></div>
-          <div class="step-card"><span>03</span><h3>FAQ</h3><p>Find answers about usage, limitations, and safe deployment expectations.</p></div>
-        </div>
-      </div>
-    </section>
-
-    <section id="predict" class="tab">
-      <div class="predict-shell">
-        <form id="predict-form" class="card form-card">
-          <div class="section-heading tight">
-            <div class="eyebrow">Patient inputs</div>
-            <h2>Run a new diagnosis</h2>
-          </div>
-
-          <div class="form-row upload-row">
-            <label for="xray">Chest X-ray image</label>
-            <input id="xray" name="chest_xray_image" type="file" accept="image/*" />
-            <div id="xray-preview" class="img-preview" aria-hidden="true"></div>
-          </div>
-
-          <div class="form-row upload-row">
-            <label for="skin">Skin lesion image</label>
-            <input id="skin" name="skin_image" type="file" accept="image/*" />
-            <div id="skin-preview" class="img-preview" aria-hidden="true"></div>
-          </div>
-
-          <div class="divider"></div>
-          <h3>Blood / Cardiac features</h3>
-          <div id="heart-fields" class="grid small-grid"></div>
-
-          <div class="form-actions">
-            <button id="predict-btn" type="submit" class="primary">Predict</button>
-            <button id="reset-btn" type="button" class="link">Reset</button>
-          </div>
-        </form>
-
-        <aside class="card result-card" id="results-card">
-          <div class="result-header">
-            <div>
-              <div class="eyebrow">Analysis dashboard</div>
-              <h3>Prediction results</h3>
-            </div>
-            <div id="model-status" class="model-status"></div>
-          </div>
-
-          <div id="results-content" class="results-content">
-            <div id="fusion-summary" class="fusion-summary">
-              <div class="risk">Overall risk: <span id="risk-level">—</span></div>
-              <div class="risk-bar"><div id="risk-bar-fill" style="width:0%"></div></div>
-            </div>
-
-            <div class="mini-grid">
-              <div id="xray-output" class="output-section output-card"></div>
-              <div id="skin-output" class="output-section output-card"></div>
-              <div id="heart-output" class="output-section output-card full"></div>
-            </div>
-
-            <div class="raw-json-toggle">
-              <button id="toggle-json" class="ghost small">View raw JSON</button>
-            </div>
-            <pre id="result" class="raw-json" hidden></pre>
-          </div>
-        </aside>
-      </div>
-    </section>
-
-    <section id="how-it-works" class="tab card section-card">
-      <div class="section-heading">
-        <div class="eyebrow">How it works</div>
-        <h2>Model and training details</h2>
-      </div>
-      <div class="steps-grid">
-        <div class="step-card"><span>01</span><h3>Chest X-ray model</h3><p>ResNet50-based multi-label classifier trained on NIH ChestX-ray14 with focal loss and per-class thresholds.</p></div>
-        <div class="step-card"><span>02</span><h3>Skin and heart models</h3><p>The API can integrate optional skin lesion and cardiac models when checkpoints are available.</p></div>
-        <div class="step-card"><span>03</span><h3>Fusion logic</h3><p>The backend merges modality outputs into a single risk score and a readable recommendation.</p></div>
-      </div>
-      <div class="section-note">
-        <p><strong>Training setup:</strong> CPU-optimized DataLoader parallelism, focal loss for imbalance, and validation-based threshold tuning.</p>
-        <p><strong>Inference flow:</strong> upload → preprocess → model inference → confidence ranking → fused clinical summary.</p>
-        <p><strong>Limitations:</strong> the chest X-ray model is still a research model and should not replace expert medical judgment.</p>
-      </div>
-    </section>
-
-    <section id="faq" class="tab card section-card">
-      <div class="section-heading">
-        <div class="eyebrow">FAQ</div>
-        <h2>Common questions</h2>
-      </div>
-      <details open>
-        <summary>What does the system do?</summary>
-        <p>It combines available modality outputs and presents a single review dashboard for clinical support.</p>
-      </details>
-      <details>
-        <summary>Can I use only the chest X-ray model?</summary>
-        <p>Yes. The interface gracefully handles missing skin or heart inputs and still returns chest X-ray results.</p>
-      </details>
-      <details>
-        <summary>Why are some models unavailable?</summary>
-        <p>Skin and heart models are optional. If checkpoints are missing, the app still works with the available X-ray model.</p>
-      </details>
-      <details>
-        <summary>Is this a medical device?</summary>
-        <p>No. This demo is for research and educational use and should not replace professional medical judgment.</p>
-      </details>
-    </section>
-  </main>
-
-  <footer class="site-footer">
-    <div class="container small">© 2026 FusionNet-Scratch — Research Prototype</div>
-  </footer>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>

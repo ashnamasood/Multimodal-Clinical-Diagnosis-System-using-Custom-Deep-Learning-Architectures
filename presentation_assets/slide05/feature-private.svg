@@ -1,0 +1,12 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <rect width="64" height="64" fill="none"/>
+  <g stroke="#0077b6" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Shield -->
+    <path d="M 32 8 L 18 14 L 18 28 C 18 40 32 52 32 52 C 32 52 46 40 46 28 L 46 14 Z"/>
+    
+    <!-- Lock inside -->
+    <rect x="26" y="32" width="12" height="10" rx="1"/>
+    <path d="M 28 32 L 28 28 C 28 26 29.5 25 32 25 C 34.5 25 36 26 36 28 L 36 32"/>
+    <circle cx="32" cy="38" r="1.5" fill="#0077b6"/>
+  </g>
+</svg>

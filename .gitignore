@@ -6,14 +6,27 @@
 *.h5
 *.log
 
+# Shipped checkpoints for clone-and-run (exceptions to rules above)
+!XRay-Pneumonia/outputs/xray/xray_cnn.pt
+!Heart&SkinCancer/outputs/heart/heart_mlp.pt
+!Heart&SkinCancer/outputs/heart/heart_preprocessor.joblib
+!Heart&SkinCancer/outputs/skin/skin_cnn.pt
+
 # Root-level chest X-ray run outputs
 /outputs/
 /my_outputs/
 
 # Heart & skin branch: ignore weights/previews; keep metrics JSON + figure PNGs
 Heart&SkinCancer/outputs/**/*.pt
+!Heart&SkinCancer/outputs/heart/heart_mlp.pt
+!Heart&SkinCancer/outputs/skin/skin_cnn.pt
 Heart&SkinCancer/outputs/**/*.joblib
+!Heart&SkinCancer/outputs/heart/heart_preprocessor.joblib
 Heart&SkinCancer/outputs/**/val_previews/
+
+XRay-Pneumonia/outputs/**/*.pt
+!XRay-Pneumonia/outputs/xray/xray_cnn.pt
+XRay-Pneumonia/outputs/**/test_previews/
 
 # --- Python ---
 __pycache__/
@@ -52,6 +65,7 @@ desktop.ini
 **/images_*/
 **/archive/
 Data_Entry_2017.csv
+XRay-Pneumonia/chest_xray/
 
 # HMNIST flat pixel CSVs are large; use Kaggle export locally
 **/hmnist_*_RGB.csv

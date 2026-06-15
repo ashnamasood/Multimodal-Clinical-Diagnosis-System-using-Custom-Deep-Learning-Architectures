@@ -1,0 +1,28 @@
+{
+  "test_loss": 0.6016866213713701,
+  "accuracy": 0.8205128205128205,
+  "macro_precision": 0.869448674992385,
+  "macro_recall": 0.7658119658119659,
+  "macro_f1": 0.784189723320158,
+  "micro_precision": 0.8205128205128205,
+  "micro_recall": 0.8205128205128205,
+  "micro_f1": 0.8205128205128205,
+  "best_val_loss": 0.0886709376655776,
+  "class_names": [
+    "NORMAL",
+    "PNEUMONIA"
+  ],
+  "data_root": "C:\\Users\\nauma\\Desktop\\GlobalHealth\\Multimodal-Clinical-Diagnosis-System-using-Custom-Deep-Learning-Architectures\\XRay-Pneumonia\\chest_xray\\chest_xray",
+  "per_class": {
+    "NORMAL": {
+      "precision": 0.9552238805970149,
+      "recall": 0.5470085470085471,
+      "f1": 0.6956521739130435
+    },
+    "PNEUMONIA": {
+      "precision": 0.7836734693877551,
+      "recall": 0.9846153846153847,
+      "f1": 0.8727272727272727
+    }
+  }
+}
