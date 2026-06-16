@@ -305,7 +305,7 @@ function renderSkin(skin, imageUrl) {
   appendResultImage(skinOutput, imageUrl, 'Uploaded skin lesion');
   appendHeadline(skinOutput, 'Skin lesion', 'skin', skin.display_text || skin.predicted_class, 'skin-headline');
   appendConfidenceBar(skinOutput, skin.headline_confidence ?? skin.confidence);
-  appendGradcam(skinOutput, skin.gradcam_image, 'Grad-CAM — skin lesion');
+  // Grad-CAM intentionally omitted for skin in the UI per user request.
   renderProbabilityChart(skinOutput, 'Top predictions', skin.top5 || skin.top3 || []);
 }
 

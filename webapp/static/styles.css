@@ -104,6 +104,7 @@ p { color: var(--text-muted); }
 .sidebar-brand img {
   width: 44px;
   height: 44px;
+  object-fit: contain;
   border-radius: var(--radius-sm);
 }
 .sidebar-brand h1 {

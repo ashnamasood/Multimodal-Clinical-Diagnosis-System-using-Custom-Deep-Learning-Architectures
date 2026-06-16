@@ -106,7 +106,7 @@ class ModelHub:
             "top3": [{"label": c, "confidence": float(p)} for c, p in out["top3"]],
             "top5": [{"label": label, "confidence": float(prob)} for label, prob in ranked[:5]],
             "probabilities": out["probabilities"],
-            "gradcam_image": out.get("gradcam_image"),
+            # Grad-CAM removed for skin outputs to avoid rendering on the frontend
         }
 
     def predict_heart(self, features: dict[str, Any]) -> dict[str, Any]:
